@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SiteSettings {
+  id               String   @id @default("main")
+  heroDesktopImage String
+  heroMobileImage  String
+  updatedAt        DateTime @updatedAt
+}
+
+model PlanCategory {
+  id        String     @id
+  name      String
+  sortOrder Int
+  plans     TourPlan[]
+  updatedAt DateTime   @updatedAt
+
+  @@index([sortOrder])
+}
+
+model TourPlan {
+  id         String       @id
+  categoryId String
+  category   PlanCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  sortOrder  Int
+  title      String
+  groupLabel String
+  hotelStars Int
+  duration   String
+  price      String
+  rateNote   String
+  personRate String?
+  image      String
+  alt        String
+  places     String
+  updatedAt  DateTime     @updatedAt
+
+  @@index([categoryId, sortOrder])
+  @@index([sortOrder])
+}
+
+model GalleryItem {
+  id        String   @id
+  sortOrder Int
+  title     String
+  alt       String
+  size      String
+  mediaType String
+  mediaUrl  String
+  updatedAt DateTime @updatedAt
+
+  @@index([sortOrder])
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sortOrder Int
+  updatedAt DateTime @updatedAt
+
+  @@index([sortOrder])
+}
+
+model SocialLink {
+  id        String   @id
+  platform  String
+  url       String
+  sortOrder Int
+  updatedAt DateTime @updatedAt
+
+  @@index([sortOrder])
+}
