@@ -2992,16 +2992,33 @@ select {
   letter-spacing: .07em;
 }
 
-.travel-contact__address,
-.travel-contact__licence {
-  margin: 17px 0 0;
+.travel-contact__addresses {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  margin-top: 17px;
+}
+
+.travel-contact__address {
+  margin: 0;
   color: #70858a;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .045em;
+  line-height: 1.5;
+}
+
+.travel-contact__address-label {
+  color: #27626c;
+  font-weight: 700;
+  margin-right: 4px;
 }
 
 .travel-contact__licence {
-  margin-top: 7px;
+  margin: 10px 0 0;
+  color: #70858a;
+  font-size: 10px;
+  letter-spacing: .045em;
 }
 
 @media (max-width: 1000px) {
@@ -3593,6 +3610,26 @@ select {
   border: 1px solid #f0cbcb;
   background: #fff3f3;
   color: #963838;
+}
+
+.admin-alert--dismissible {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-alert__close {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border: 1px solid #e7baba;
+  border-radius: 50%;
+  background: #fff;
+  color: #963838;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .admin-alert--success {

@@ -4,8 +4,23 @@ import { parseSiteContent } from "@/lib/site-content-validation";
 
 let pendingSeed: Promise<SiteContent> | null = null;
 
-async function readStoredSiteContent(): Promise<SiteContent | null> {
-  const [settings, categories, plans, galleryItems, locations, socialLinks] = await Promise.all([
+function isTransientDatabaseError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as { code?: string }).code;
+  if (code === "P1001" || code === "P1002" || code === "P1017" || code === "P2024") {
+    return true;
+  }
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes("server has closed the connection") ||
+    msg.includes("connection reset") ||
+    msg.includes("timed out") ||
+    msg.includes("can't reach database server")
+  );
+}
+
+async function readStoredSiteContentOnce(): Promise<SiteContent | null> {
+  const [settings, categories, plans, galleryItems, locations, socialLinks] = await prisma.$transaction([
     prisma.siteSettings.findUnique({ where: { id: "main" } }),
     prisma.planCategory.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.tourPlan.findMany({ orderBy: { sortOrder: "asc" } }),
@@ -62,6 +77,16 @@ async function readStoredSiteContent(): Promise<SiteContent | null> {
   });
 }
 
+async function readStoredSiteContent(): Promise<SiteContent | null> {
+  try {
+    return await readStoredSiteContentOnce();
+  } catch (error) {
+    if (!isTransientDatabaseError(error)) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return readStoredSiteContentOnce();
+  }
+}
+
 export async function getSiteContent(): Promise<SiteContent> {
   if (!process.env.DATABASE_URL) return defaultSiteContent;
 
@@ -69,9 +94,18 @@ export async function getSiteContent(): Promise<SiteContent> {
   if (existing) return existing;
 
   if (!pendingSeed) {
-    pendingSeed = saveSiteContent(defaultSiteContent).finally(() => {
-      pendingSeed = null;
-    });
+    pendingSeed = saveSiteContent(defaultSiteContent)
+      .catch(async (error) => {
+        const code = (error as { code?: string } | null)?.code;
+        if (code === "P2002" || code === "P2034") {
+          const seeded = await readStoredSiteContent();
+          if (seeded) return seeded;
+        }
+        throw error;
+      })
+      .finally(() => {
+        pendingSeed = null;
+      });
   }
   return pendingSeed;
 }

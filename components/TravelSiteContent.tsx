@@ -210,6 +210,12 @@ export default function TravelSiteContent({ content }: { content: SiteContent })
   const [selectedLocation, setSelectedLocation] = useState("");
   const [selectedRating, setSelectedRating] = useState("");
   const [selectedGalleryPhoto, setSelectedGalleryPhoto] = useState<GalleryPhoto | null>(null);
+
+  useEffect(() => {
+    if (selectedLocation && !content.locations.some((loc) => loc.toLowerCase() === selectedLocation.toLowerCase())) {
+      setSelectedLocation("");
+    }
+  }, [content.locations, selectedLocation]);
   const previewRef = useRef<HTMLDialogElement>(null);
   const galleryPreviewRef = useRef<HTMLDialogElement>(null);
   const navigateGalleryPreview = (direction: -1 | 1) => {
@@ -440,11 +446,18 @@ export default function TravelSiteContent({ content }: { content: SiteContent })
               >
                 ←
               </button>
-              {"video" in selectedGalleryPhoto ? (
-                <video className="travel-gallery-preview__media" controls autoPlay muted playsInline>
+              {"video" in selectedGalleryPhoto && selectedGalleryPhoto.video ? (
+                <video
+                  key={selectedGalleryPhoto.id}
+                  className="travel-gallery-preview__media"
+                  controls
+                  autoPlay
+                  muted
+                  playsInline
+                >
                   <source src={selectedGalleryPhoto.video} type="video/mp4" />
                 </video>
-              ) : (
+              ) : selectedGalleryPhoto.image ? (
                 <Image
                   className="travel-gallery-preview__media"
                   src={selectedGalleryPhoto.image}
@@ -452,7 +465,7 @@ export default function TravelSiteContent({ content }: { content: SiteContent })
                   fill
                   sizes="(max-width: 700px) 94vw, 860px"
                 />
-              )}
+              ) : null}
               <button
                 type="button"
                 className="travel-gallery-preview__nav travel-gallery-preview__nav--next"
@@ -518,18 +531,18 @@ export default function TravelSiteContent({ content }: { content: SiteContent })
           {galleryPhotos.map((photo) => (
             <button
               type="button"
-              className={`travel-gallery__item${photo.size ? ` travel-gallery__item--${photo.size}` : ""}${"video" in photo && photo.size === "full" ? " travel-gallery__item--video" : ""}`}
+              className={`travel-gallery__item${photo.size ? ` travel-gallery__item--${photo.size}` : ""}${"video" in photo && photo.video && photo.size === "full" ? " travel-gallery__item--video" : ""}`}
               key={photo.id}
               aria-label={`Open ${photo.title} gallery preview`}
               onClick={() => setSelectedGalleryPhoto(photo)}
             >
-              {"video" in photo ? (
+              {"video" in photo && photo.video ? (
                 <video autoPlay loop muted playsInline preload="metadata" aria-hidden="true">
                   <source src={photo.video} type="video/mp4" />
                 </video>
-              ) : (
+              ) : photo.image ? (
                 <Image src={photo.image} alt={photo.alt} fill sizes="(max-width: 500px) 100vw, (max-width: 900px) 50vw, 25vw" />
-              )}
+              ) : null}
               <span className="travel-gallery__details">{photo.title}</span>
             </button>
           ))}
@@ -653,7 +666,14 @@ export default function TravelSiteContent({ content }: { content: SiteContent })
           </span>
         </a>
         <a className="travel-contact__phone" href="tel:+918923326455">+91 89233 26455</a>
-        <p className="travel-contact__address">Gulmarg Road, Agri Kalan, Magam, Kashmir</p>
+        <div className="travel-contact__addresses">
+          <p className="travel-contact__address">
+            <span className="travel-contact__address-label">Main Office:</span> Gulmarg Road, Agri Kalan, Magam, Kashmir
+          </p>
+          <p className="travel-contact__address">
+            <span className="travel-contact__address-label">Branch Office:</span> Rehmat Nagar, Muzaffarnagar
+          </p>
+        </div>
         <p className="travel-contact__licence">Registration: January 2025 · Licence No. JKEA00004953</p>
       </section>
     </>

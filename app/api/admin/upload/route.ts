@@ -61,7 +61,9 @@ export async function POST(request: Request) {
       fileBytes.toString("ascii", 8, 12) === "WEBP") ||
     (file.type === "image/avif" &&
       fileBytes.toString("ascii", 4, 8) === "ftyp" &&
-      ["avif", "avis"].includes(fileBytes.toString("ascii", 8, 12)));
+      (["avif", "avis"].includes(fileBytes.toString("ascii", 8, 12)) ||
+        (fileBytes.toString("ascii", 8, 12) === "mif1" &&
+          fileBytes.subarray(16, Math.min(fileBytes.length, 64)).includes("avif"))));
   if (!validImage) {
     return NextResponse.json({ error: "The selected file is not a valid supported image." }, { status: 415 });
   }

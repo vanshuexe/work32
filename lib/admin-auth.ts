@@ -75,10 +75,16 @@ export function isSameOriginRequest(request: Request): boolean {
   try {
     const originUrl = new URL(origin);
     const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
-    const host = forwardedHost || request.headers.get("host") || new URL(request.url).host;
-    const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
-    const protocol = forwardedProtocol || new URL(request.url).protocol.slice(0, -1);
-    return originUrl.host.toLowerCase() === host.toLowerCase() && originUrl.protocol === `${protocol}:`;
+    const rawHost = forwardedHost || request.headers.get("host") || new URL(request.url).host;
+    const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+    const protocol = forwardedProtocol || new URL(request.url).protocol.slice(0, -1).toLowerCase();
+    const requestUrl = new URL(`${protocol}://${rawHost}`);
+    return (
+      originUrl.hostname.toLowerCase() === requestUrl.hostname.toLowerCase() &&
+      originUrl.protocol === requestUrl.protocol &&
+      (originUrl.port || (originUrl.protocol === "https:" ? "443" : "80")) ===
+        (requestUrl.port || (requestUrl.protocol === "https:" ? "443" : "80"))
+    );
   } catch {
     return false;
   }

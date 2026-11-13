@@ -16,7 +16,34 @@ const tabs: { id: AdminTab; label: string }[] = [
 const socialPlatforms = ["Instagram", "Facebook", "YouTube", "WhatsApp", "X", "TikTok", "LinkedIn", "Other"];
 
 function newId(prefix: string): string {
-  return `${prefix}-${crypto.randomUUID()}`;
+  const uuid =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}-${uuid}`;
+}
+
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+async function readApiPayload(response: Response): Promise<Record<string, unknown> | null> {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function getApiError(payload: Record<string, unknown> | null, response: Response, fallback: string): string {
+  if (payload && typeof payload.error === "string" && payload.error.trim()) {
+    return payload.error;
+  }
+  if (response.status === 413) {
+    return "Images must be smaller than 5 MB.";
+  }
+  return fallback;
 }
 
 function normalizePackagesOrder(categories: PackageCategory[], packages: TourPackage[]): TourPackage[] {
@@ -72,15 +99,25 @@ function UploadableUrl({
     const input = event.currentTarget;
     const file = input.files?.[0];
     if (!file) return;
+    if (file.size === 0 || file.size > MAX_UPLOAD_BYTES) {
+      setError("Images must be smaller than 5 MB.");
+      input.value = "";
+      return;
+    }
     setUploading(true);
     setError("");
     try {
       const body = new FormData();
       body.set("file", file);
       const response = await fetch("/api/admin/upload", { method: "POST", body });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Image upload failed.");
-      onChange(result.url as string);
+      const result = await readApiPayload(response);
+      if (!response.ok) {
+        throw new Error(getApiError(result, response, "Image upload failed."));
+      }
+      if (!result || typeof result.url !== "string") {
+        throw new Error("Image upload failed.");
+      }
+      onChange(result.url);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Image upload failed.");
     } finally {
@@ -147,12 +184,26 @@ export default function AdminPanel() {
   }, [isDirty]);
 
   const loadContent = async () => {
+    setError("");
     const response = await fetch("/api/admin/content", { cache: "no-store" });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error ?? "Could not load content.");
-    const loaded = result as SiteContent;
+    if (response.status === 401) {
+      setAuthenticated(false);
+      setContent(null);
+      setSavedSnapshot("");
+      setLoginError("Your admin session has expired. Please sign in again.");
+      return;
+    }
+    const result = await readApiPayload(response);
+    if (!response.ok) {
+      throw new Error(getApiError(result, response, "Could not load content."));
+    }
+    if (!result) {
+      throw new Error("Site content response was empty.");
+    }
+    const loaded = result as unknown as SiteContent;
     setContent(loaded);
     setSavedSnapshot(JSON.stringify(loaded));
+    setError("");
   };
 
   useEffect(() => {
@@ -183,19 +234,28 @@ export default function AdminPanel() {
   const signIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoginError("");
+    setError("");
     try {
       const response = await fetch("/api/admin/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Sign in failed.");
-      setAuthenticated(true);
-      setPassword("");
-      await loadContent();
+      const result = await readApiPayload(response);
+      if (!response.ok) {
+        throw new Error(getApiError(result, response, "Sign in failed."));
+      }
     } catch (signInError) {
       setLoginError(signInError instanceof Error ? signInError.message : "Sign in failed.");
+      return;
+    }
+
+    setAuthenticated(true);
+    setPassword("");
+    try {
+      await loadContent();
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Could not load content.");
     }
   };
 
@@ -223,9 +283,17 @@ export default function AdminPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(content),
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Could not save changes.");
-      const saved = result as SiteContent;
+      if (response.status === 401) {
+        throw new Error("Your admin session has expired. Sign in again in another tab, then click Save changes.");
+      }
+      const result = await readApiPayload(response);
+      if (!response.ok) {
+        throw new Error(getApiError(result, response, "Could not save changes."));
+      }
+      if (!result) {
+        throw new Error("Could not save changes.");
+      }
+      const saved = result as unknown as SiteContent;
       setContent(saved);
       setSavedSnapshot(JSON.stringify(saved));
       setMessage("Changes saved to database. The live website is now updated.");
@@ -656,7 +724,14 @@ export default function AdminPanel() {
       </nav>
 
       <section className="admin-content">
-        {error && <p className="admin-alert admin-alert--error" role="alert">{error}</p>}
+        {error && (
+          <div className="admin-alert admin-alert--error admin-alert--dismissible" role="alert">
+            <span>{error}</span>
+            <button type="button" className="admin-alert__close" aria-label="Dismiss error" onClick={() => setError("")}>
+              ×
+            </button>
+          </div>
+        )}
         {message && <p className="admin-alert admin-alert--success" role="status">{message}</p>}
 
         {tab === "plans" && (
@@ -1233,10 +1308,16 @@ export default function AdminPanel() {
                       onBlur={(event) => {
                         const raw = event.target.value.trim();
                         if (raw && !/^https?:\/\//i.test(raw)) {
-                          setContent({
-                            ...content,
-                            socialLinks: content.socialLinks.map((item) => item.id === link.id ? { ...item, url: `https://${raw}` } : item),
-                          });
+                          setContent((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  socialLinks: current.socialLinks.map((item) =>
+                                    item.id === link.id ? { ...item, url: `https://${raw}` } : item,
+                                  ),
+                                }
+                              : current,
+                          );
                         }
                       }}
                     />
